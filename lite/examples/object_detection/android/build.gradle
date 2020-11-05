@@ -4,10 +4,10 @@ buildscript {
     repositories {
         google()
         jcenter()
-        mavenLocal()
+        //mavenLocal()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:4.0.0'
+        classpath 'com.android.tools.build:gradle:4.1.0'
         classpath 'de.undercouch:gradle-download-task:4.0.2'
         // NOTE: Do not place your application dependencies here; they belong
         // in the individual module build.gradle files
@@ -18,10 +18,15 @@ allprojects {
     repositories {
         google()
         jcenter()
-        mavenLocal()
+        //mavenLocal()
+        maven { url 'http://raw.github.com/saki4510t/libcommon/master/repository/' }
     }
 }
 
 task clean(type: Delete) {
     delete rootProject.buildDir
+}
+
+ext {
+    commonLibVersion= '2.5.1'
 }

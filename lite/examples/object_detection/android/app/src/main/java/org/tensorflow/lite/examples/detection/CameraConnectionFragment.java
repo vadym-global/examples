@@ -44,6 +44,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.Size;
 import android.util.SparseIntArray;
 import android.view.LayoutInflater;
@@ -168,12 +169,14 @@ public class CameraConnectionFragment extends Fragment {
         @Override
         public void onSurfaceTextureAvailable(
             final SurfaceTexture texture, final int width, final int height) {
+          LOGGER.i("onSurfaceTextureAvailable(): " + width + "x" + height);
           openCamera(width, height);
         }
 
         @Override
         public void onSurfaceTextureSizeChanged(
             final SurfaceTexture texture, final int width, final int height) {
+          LOGGER.i("onSurfaceTextureSizeChanged(): " + width + "x" + height);
           configureTransform(width, height);
         }
 

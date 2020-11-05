@@ -20,6 +20,7 @@ import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -38,6 +39,8 @@ import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.SwitchCompat;
 import androidx.appcompat.widget.Toolbar;
+
+import android.util.Log;
 import android.util.Size;
 import android.view.Surface;
 import android.view.View;
@@ -53,11 +56,18 @@ import java.nio.ByteBuffer;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
+import com.serenegiant.usb.IFrameCallback;
+import com.serenegiant.usb.USBMonitor;
+import com.serenegiant.usb.USBMonitor.OnDeviceConnectListener;
+import com.serenegiant.usb.USBMonitor.UsbControlBlock;
+import com.serenegiant.usb.UVCCamera;
+
 public abstract class CameraActivity extends AppCompatActivity
     implements OnImageAvailableListener,
         Camera.PreviewCallback,
         CompoundButton.OnCheckedChangeListener,
-        View.OnClickListener {
+        View.OnClickListener,
+        IFrameCallback {
   private static final Logger LOGGER = new Logger();
 
   private static final int PERMISSIONS_REQUEST = 1;
@@ -292,6 +302,73 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   @Override
+  public void onFrame(final ByteBuffer frame) {
+    LOGGER.d("onFrame");
+    // We need wait until we have some size from onPreviewSizeChosen
+
+    //previewWidth = getDesiredPreviewFrameSize().getWidth();
+    //previewHeight = getDesiredPreviewFrameSize().getHeight();;
+
+    if (previewWidth == 0 || previewHeight == 0) {
+      LOGGER.d("We need wait until we have some size from onPreviewSizeChosen");
+      return;
+    }
+    if (rgbBytes == null) {
+      rgbBytes = new int[previewWidth * previewHeight];
+    }
+    try {
+      if (frame == null) {
+        LOGGER.d("frame == null");
+        return;
+      }
+
+      if (isProcessingFrame) {
+        LOGGER.d("Drop frame");
+        frame.clear();
+        return;
+      }
+      isProcessingFrame = true;
+      LOGGER.d("imageAvailable");
+      Trace.beginSection("imageAvailable");
+
+      imageConverter =
+              new Runnable() {
+                @Override
+                public void run() {
+                  byte [] input = new byte[frame.capacity()];
+                  //for (int i = 0; i < frame.capacity()/4; i++) {
+                  //}
+                  frame.get(input, 0, input.length);
+                  ImageUtils.convertYUV420SPToARGB8888(
+                          input,
+                          previewWidth,
+                          previewHeight,
+                          rgbBytes);
+
+                  LOGGER.d("frame: " + frame.getInt(0) + " " + frame.getInt(1) + " " + frame.getInt(2) + " " + frame.getInt(3));
+                  LOGGER.d("rgbBytes: " + rgbBytes[0] + " " + rgbBytes[1] + " " + rgbBytes[2] + " " + rgbBytes[3]);
+                }
+              };
+
+      postInferenceCallback =
+              new Runnable() {
+                @Override
+                public void run() {
+                  frame.clear();
+                  isProcessingFrame = false;
+                }
+              };
+
+      processImage();
+    } catch (final Exception e) {
+      LOGGER.e(e, "Exception!");
+      Trace.endSection();
+      return;
+    }
+    Trace.endSection();
+  }
+
+  @Override
   public synchronized void onStart() {
     LOGGER.d("onStart " + this);
     super.onStart();
@@ -396,7 +473,9 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   private String chooseCamera() {
+
     final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+
     try {
       for (final String cameraId : manager.getCameraIdList()) {
         final CameraCharacteristics characteristics = manager.getCameraCharacteristics(cameraId);
@@ -428,6 +507,7 @@ public abstract class CameraActivity extends AppCompatActivity
       LOGGER.e(e, "Not allowed to access camera");
     }
 
+    LOGGER.i("Return camera NULL");
     return null;
   }
 
@@ -436,7 +516,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
     Fragment fragment;
     if (useCamera2API) {
-      CameraConnectionFragment camera2Fragment =
+      /*CameraConnectionFragment camera2Fragment =
           CameraConnectionFragment.newInstance(
               new CameraConnectionFragment.ConnectionCallback() {
                 @Override
@@ -451,7 +531,31 @@ public abstract class CameraActivity extends AppCompatActivity
               getDesiredPreviewFrameSize());
 
       camera2Fragment.setCamera(cameraId);
-      fragment = camera2Fragment;
+      fragment = camera2Fragment;*/
+
+      ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
+              new ExternalCameraConnectionFragment.ConnectionCallback() {
+                @Override
+                public void onPreviewSizeChosen(final Size size, final int rotation) {
+                  previewHeight = size.getHeight();
+                  previewWidth = size.getWidth();
+                  CameraActivity.this.onPreviewSizeChosen(size, rotation);
+                }
+                },
+              this,
+              getLayoutId(),
+              getDesiredPreviewFrameSize());
+
+      fragment = externalCameraFrag;
+
+      //R.layout.tfe_od_camera_connection_fragment_tracking;
+
+      /*VideoPlaybackFragment videoFragment = VideoPlaybackFragment.newInstance(
+              this,
+              getLayoutId(),
+              getDesiredPreviewFrameSize());
+
+      fragment = videoFragment;*/
     } else {
       fragment =
           new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());

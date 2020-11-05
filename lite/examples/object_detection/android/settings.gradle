@@ -1,2 +1,7 @@
+include ':usbCameraCommon-release'
+include ':libuvccamera-release'
+include ':usbCameraCommon-release'
+include ':libdsdd'
+include ':libuvccamera-release'
 rootProject.name = 'TFLite Object Detection Demo App'
 include ':app', ':lib_interpreter', ':lib_task_api'
