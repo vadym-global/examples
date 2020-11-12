@@ -1,3 +1,4 @@
+include ':sdk'
 include ':usbCameraCommon-release'
 include ':libuvccamera-release'
 include ':usbCameraCommon-release'

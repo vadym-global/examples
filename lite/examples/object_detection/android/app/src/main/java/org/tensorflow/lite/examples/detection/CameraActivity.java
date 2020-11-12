@@ -20,7 +20,6 @@ import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.pm.PackageManager;
-import android.graphics.Bitmap;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -46,28 +45,31 @@ import android.view.Surface;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.view.WindowManager;
+import android.widget.AdapterView;
+import android.widget.ArrayAdapter;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
+import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
+
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
 import com.serenegiant.usb.IFrameCallback;
-import com.serenegiant.usb.USBMonitor;
-import com.serenegiant.usb.USBMonitor.OnDeviceConnectListener;
-import com.serenegiant.usb.USBMonitor.UsbControlBlock;
-import com.serenegiant.usb.UVCCamera;
 
 public abstract class CameraActivity extends AppCompatActivity
     implements OnImageAvailableListener,
         Camera.PreviewCallback,
         CompoundButton.OnCheckedChangeListener,
         View.OnClickListener,
-        IFrameCallback {
+        IFrameCallback,
+        AdapterView.OnItemSelectedListener {
   private static final Logger LOGGER = new Logger();
 
   private static final int PERMISSIONS_REQUEST = 1;
@@ -95,6 +97,10 @@ public abstract class CameraActivity extends AppCompatActivity
   private ImageView plusImageView, minusImageView;
   private SwitchCompat apiSwitchCompat;
   private TextView threadsTextView;
+  private Spinner resolutionSpinner;
+  private ArrayAdapter<String> adapter;
+  private Size cameraResolution;
+  List<String> supportedResolutions;
 
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
@@ -107,8 +113,9 @@ public abstract class CameraActivity extends AppCompatActivity
     setSupportActionBar(toolbar);
     getSupportActionBar().setDisplayShowTitleEnabled(false);
 
+
     if (hasPermission()) {
-      setFragment();
+      setFragment(null);
     } else {
       requestPermission();
     }
@@ -121,6 +128,19 @@ public abstract class CameraActivity extends AppCompatActivity
     gestureLayout = findViewById(R.id.gesture_layout);
     sheetBehavior = BottomSheetBehavior.from(bottomSheetLayout);
     bottomSheetArrowImageView = findViewById(R.id.bottom_sheet_arrow);
+    resolutionSpinner = findViewById(R.id.resolutionSpinner);
+
+
+    cameraResolution = new Size(640, 480);
+
+    supportedResolutions = new ArrayList<String>();
+    supportedResolutions.add("" + cameraResolution.getWidth() + "x" + cameraResolution.getHeight());
+
+    adapter = new ArrayAdapter<String>(getApplicationContext(),
+            android.R.layout.simple_spinner_item, supportedResolutions);
+    adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
+    resolutionSpinner.setAdapter(adapter);
+    resolutionSpinner.setOnItemSelectedListener(this);
 
     ViewTreeObserver vto = gestureLayout.getViewTreeObserver();
     vto.addOnGlobalLayoutListener(
@@ -177,6 +197,36 @@ public abstract class CameraActivity extends AppCompatActivity
 
     plusImageView.setOnClickListener(this);
     minusImageView.setOnClickListener(this);
+  }
+
+  @Override
+  public void onItemSelected(AdapterView<?> parent, View view,
+          int pos, long id) {
+    // An item was selected. You can retrieve the selected item using
+    // parent.getItemAtPosition(pos)
+    String currentResolution = resolutionToString(cameraResolution);
+    String resolution = (String) parent.getItemAtPosition(pos);
+    if (resolution.equals(currentResolution) == false) {
+      resolutionSpinner.setSelection(pos);
+      adapter.notifyDataSetChanged();
+      String [] res = resolution.split("x");
+      cameraResolution = resolutionFromString(resolution);
+
+      setFragment(cameraResolution);
+    }
+  }
+
+  private Size resolutionFromString(String input) {
+    String [] res = input.split("x");
+    return new Size(Integer.parseInt(res[0]), Integer.parseInt(res[1]));
+  }
+
+  private String resolutionToString(Size input) {
+    return "" + input.getWidth() + "x" + input.getHeight();
+  }
+
+  @Override
+  public void onNothingSelected(AdapterView<?> parent) {
   }
 
   protected int[] getRgbBytes() {
@@ -303,12 +353,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
   @Override
   public void onFrame(final ByteBuffer frame) {
-    LOGGER.d("onFrame");
-    // We need wait until we have some size from onPreviewSizeChosen
-
-    //previewWidth = getDesiredPreviewFrameSize().getWidth();
-    //previewHeight = getDesiredPreviewFrameSize().getHeight();;
-
+    LOGGER.d("onFrame start");
     if (previewWidth == 0 || previewHeight == 0) {
       LOGGER.d("We need wait until we have some size from onPreviewSizeChosen");
       return;
@@ -336,8 +381,6 @@ public abstract class CameraActivity extends AppCompatActivity
                 @Override
                 public void run() {
                   byte [] input = new byte[frame.capacity()];
-                  //for (int i = 0; i < frame.capacity()/4; i++) {
-                  //}
                   frame.get(input, 0, input.length);
                   ImageUtils.convertYUV420SPToARGB8888(
                           input,
@@ -360,8 +403,9 @@ public abstract class CameraActivity extends AppCompatActivity
               };
 
       processImage();
+      LOGGER.d("onFrame end");
     } catch (final Exception e) {
-      LOGGER.e(e, "Exception!");
+      LOGGER.e(e, "onFrame Exception!");
       Trace.endSection();
       return;
     }
@@ -424,7 +468,7 @@ public abstract class CameraActivity extends AppCompatActivity
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     if (requestCode == PERMISSIONS_REQUEST) {
       if (allPermissionsGranted(grantResults)) {
-        setFragment();
+        setFragment(null);
       } else {
         requestPermission();
       }
@@ -511,10 +555,11 @@ public abstract class CameraActivity extends AppCompatActivity
     return null;
   }
 
-  protected void setFragment() {
-    String cameraId = chooseCamera();
 
+  protected void setFragment(Size cameraResolution) {
+    String cameraId = chooseCamera();
     Fragment fragment;
+
     if (useCamera2API) {
       /*CameraConnectionFragment camera2Fragment =
           CameraConnectionFragment.newInstance(
@@ -539,12 +584,26 @@ public abstract class CameraActivity extends AppCompatActivity
                 public void onPreviewSizeChosen(final Size size, final int rotation) {
                   previewHeight = size.getHeight();
                   previewWidth = size.getWidth();
+                  rgbBytes = null;
                   CameraActivity.this.onPreviewSizeChosen(size, rotation);
                 }
-                },
+              },
               this,
               getLayoutId(),
-              getDesiredPreviewFrameSize());
+              cameraResolution == null ? getDesiredPreviewFrameSize() : cameraResolution,
+              new ExternalCameraConnectionFragment.SupportedResolutionsCallback() {
+                @Override
+                public void onSupportedResolutionsFound(List<Size> resolutions) {
+                  for (int i = 0; i < resolutions.size(); i++) {
+                    String resolution = "" + resolutions.get(i).getWidth()  + "x" + resolutions.get(i).getHeight();
+                    if (supportedResolutions.contains(resolution) == false) {
+                      adapter.add(resolution);
+                    }
+
+                  }
+                  adapter.notifyDataSetChanged();
+                }
+              });
 
       fragment = externalCameraFrag;
 

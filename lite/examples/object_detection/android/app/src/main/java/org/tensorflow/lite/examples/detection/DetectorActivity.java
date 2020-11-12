@@ -16,6 +16,11 @@
 
 package org.tensorflow.lite.examples.detection;
 
+import static org.opencv.core.Core.BORDER_CONSTANT;
+import static org.opencv.core.Core.BORDER_REPLICATE;
+import static org.opencv.core.Core.copyMakeBorder;
+import static org.opencv.core.CvType.CV_8UC3;
+
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.Canvas;
@@ -33,6 +38,16 @@ import android.widget.Toast;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+
+import org.opencv.android.BaseLoaderCallback;
+import org.opencv.android.LoaderCallbackInterface;
+import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
+import org.opencv.core.Core;
+import org.opencv.core.Mat;
+import org.opencv.core.Rect;
+import org.opencv.core.Scalar;
+import org.opencv.imgproc.Imgproc;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
 import org.tensorflow.lite.examples.detection.customview.OverlayView.DrawCallback;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
@@ -59,28 +74,38 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.5f;
   private static final boolean MAINTAIN_ASPECT = false;
   private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
-  private static final boolean SAVE_PREVIEW_BITMAP = false;
+  private static final boolean SAVE_PREVIEW_BITMAP = true;
   private static final float TEXT_SIZE_DIP = 10;
   OverlayView trackingOverlay;
   private Integer sensorOrientation;
-
   private Detector detector;
-
   private long lastProcessingTimeMs;
   private Bitmap rgbFrameBitmap = null;
   private Bitmap croppedBitmap = null;
   private Bitmap cropCopyBitmap = null;
-
   private boolean computingDetection = false;
-
   private long timestamp = 0;
-
-  private Matrix frameToCropTransform;
-  private Matrix cropToFrameTransform;
-
   private MultiBoxTracker tracker;
-
   private BorderedText borderedText;
+  private Mat mRgbImageMat;
+  private int mPaddingImageSize;
+  int mBottom = 0, mTop = 0, mRight = 0, mLeft = 0;
+
+  private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
+    @Override
+    public void onManagerConnected(int status) {
+      switch (status) {
+        case LoaderCallbackInterface.SUCCESS:
+        {
+          LOGGER.i("OpenCV: " + "OpenCV loaded successfully");
+        } break;
+        default:
+        {
+          super.onManagerConnected(status);
+        } break;
+      }
+    }
+  };
 
   @Override
   public void onPreviewSizeChosen(final Size size, final int rotation) {
@@ -123,14 +148,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     rgbFrameBitmap = Bitmap.createBitmap(previewWidth, previewHeight, Config.ARGB_8888);
     croppedBitmap = Bitmap.createBitmap(cropSize, cropSize, Config.ARGB_8888);
 
-    frameToCropTransform =
-        ImageUtils.getTransformationMatrix(
-            previewWidth, previewHeight,
-            cropSize, cropSize,
-            sensorOrientation, MAINTAIN_ASPECT);
-
-    cropToFrameTransform = new Matrix();
-    frameToCropTransform.invert(cropToFrameTransform);
+    // Check OpenCV is loaded!!!
+    if (!OpenCVLoader.initDebug()) {
+      LOGGER.i("OpenCV: " + "Internal OpenCV library not found. Using OpenCV Manager for initialization");
+      OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_0_0, this, mLoaderCallback);
+    } else {
+      LOGGER.i("OpenCV: " + "OpenCV library found inside package. Using it!");
+      mLoaderCallback.onManagerConnected(LoaderCallbackInterface.SUCCESS);
+    }
 
     trackingOverlay = (OverlayView) findViewById(R.id.tracking_overlay);
     trackingOverlay.addCallback(
@@ -163,13 +188,37 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
 
+    mRgbImageMat = new Mat();
+    Utils.bitmapToMat(rgbFrameBitmap, mRgbImageMat);
+    Scalar color = new Scalar( 0.0, 0.0, 0.0, 255.0 );
+    Mat bordersImage = new Mat();
+    Mat resizeImage = new Mat();
+
+    mBottom = 0;
+    mTop = 0;
+    mRight = 0;
+    mLeft = 0;
+    if (previewWidth > previewHeight) {
+      mBottom = mTop = (previewWidth - previewHeight) / 2;
+    } else if (previewWidth < previewHeight){
+      mRight = mLeft = (previewHeight - previewWidth) / 2;
+    }
+    Core.copyMakeBorder(mRgbImageMat, bordersImage, mTop, mBottom, mLeft, mRight, BORDER_CONSTANT, color);
+    org.opencv.core.Size size = new org.opencv.core.Size(300, 300);
+    Imgproc.resize(bordersImage, resizeImage, size );
+    Bitmap opencvResizeimageBitmap = Bitmap.createBitmap(300, 300, Config.ARGB_8888);
+    Utils.matToBitmap(resizeImage, opencvResizeimageBitmap);
+
+    mPaddingImageSize = Math.max(previewWidth, previewHeight);
+
     readyForNextImage();
 
-    final Canvas canvas = new Canvas(croppedBitmap);
-    canvas.drawBitmap(rgbFrameBitmap, frameToCropTransform, null);
+    Utils.matToBitmap(resizeImage, croppedBitmap);
+
     // For examining the actual TF input.
     if (SAVE_PREVIEW_BITMAP) {
-      ImageUtils.saveBitmap(croppedBitmap);
+      ImageUtils.saveBitmap(rgbFrameBitmap, "original.png");
+      ImageUtils.saveBitmap(opencvResizeimageBitmap, "opencvresize.png");
     }
 
     runInBackground(
@@ -203,7 +252,12 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
               if (location != null && result.getConfidence() >= minimumConfidence) {
                 canvas.drawRect(location, paint);
 
-                cropToFrameTransform.mapRect(location);
+                /////cropToFrameTransform.mapRect(location);
+                float resizeRatio = (float)mPaddingImageSize / (float)TF_OD_API_INPUT_SIZE;
+                location.top = location.top * resizeRatio - mTop;
+                location.bottom = location.bottom * resizeRatio - mBottom;
+                location.right = location.right * resizeRatio - mRight;
+                location.left = location.left * resizeRatio - mLeft;
 
                 result.setLocation(location);
                 mappedRecognitions.add(result);

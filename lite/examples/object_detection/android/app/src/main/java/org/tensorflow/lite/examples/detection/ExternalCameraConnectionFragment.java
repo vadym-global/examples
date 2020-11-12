@@ -4,17 +4,11 @@ package org.tensorflow.lite.examples.detection;
 import android.annotation.SuppressLint;
 import android.app.Activity;
 import android.app.Fragment;
-import android.content.Context;
 import android.content.res.Configuration;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.params.StreamConfigurationMap;
 import android.hardware.usb.UsbDevice;
-import android.media.ImageReader.OnImageAvailableListener;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
@@ -24,13 +18,11 @@ import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
-
 import com.serenegiant.usb.IFrameCallback;
 import com.serenegiant.usb.USBMonitor;
 import com.serenegiant.usb.UVCCamera;
 import org.tensorflow.lite.examples.detection.customview.AutoFitTextureView;
-
-import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.List;
 
 @SuppressLint("ValidFragment")
@@ -57,6 +49,7 @@ public class ExternalCameraConnectionFragment extends Fragment {
     private final IFrameCallback mIFrameCallback;
 
     private final ConnectionCallback cameraConnectionCallback;
+    private final SupportedResolutionsCallback supportedResolutionsCallback;
 
     /**
      * {@link TextureView.SurfaceTextureListener} handles several lifecycle events on a {@link
@@ -102,11 +95,13 @@ public class ExternalCameraConnectionFragment extends Fragment {
             final ConnectionCallback connectionCallback,
             final IFrameCallback frameCallback,
             final int layout,
-            final Size inputSize) {
+            final Size inputSize,
+            SupportedResolutionsCallback supportedResolutionsCallback) {
         this.cameraConnectionCallback = connectionCallback;
         this.mIFrameCallback = frameCallback;
         this.layout = layout;
         this.inputSize = inputSize;
+        this.supportedResolutionsCallback = supportedResolutionsCallback;
         Log.v(TAG, "ExternalCameraConnectionFragment()");
     }
 
@@ -114,9 +109,10 @@ public class ExternalCameraConnectionFragment extends Fragment {
             final ConnectionCallback connectionCallback,
             final IFrameCallback frameCallback,
             final int layout,
-            final Size inputSize) {
+            final Size inputSize,
+            SupportedResolutionsCallback supportedResolutionsCallback) {
         Log.v(TAG, "newInstance:");
-        return new ExternalCameraConnectionFragment(connectionCallback, frameCallback, layout, inputSize);
+        return new ExternalCameraConnectionFragment(connectionCallback, frameCallback, layout, inputSize, supportedResolutionsCallback);
     }
 
     @Override
@@ -144,21 +140,8 @@ public class ExternalCameraConnectionFragment extends Fragment {
         super.onResume();
 
         final Activity activity = getActivity();
-        Log.v(TAG, "mUSBMonitor()");
         mUSBMonitor = new USBMonitor(activity, mOnDeviceConnectListener);
-        Log.v(TAG, "mUSBMonitor() end");
         mUSBMonitor.register();
-
-
-
-        //final int orientation = getResources().getConfiguration().orientation;
-        //if (orientation != Configuration.ORIENTATION_LANDSCAPE) {
-        //    textureView.setAspectRatio(inputSize.getWidth(), inputSize.getHeight());
-        //} else {
-        //    textureView.setAspectRatio(inputSize.getHeight(), inputSize.getWidth());
-        //}
-
-
 
         // When the screen is turned off and turned back on, the SurfaceTexture is already
         // available, and "onSurfaceTextureAvailable" will not be called. In that case, we can open
@@ -181,6 +164,7 @@ public class ExternalCameraConnectionFragment extends Fragment {
 
     @Override
     public void onPause() {
+        Log.v(TAG, "onPause");
         synchronized (mSync) {
             if (mUVCCamera != null) {
                 mUVCCamera.stopPreview();
@@ -189,23 +173,27 @@ public class ExternalCameraConnectionFragment extends Fragment {
                 mUSBMonitor.unregister();
             }
         }
-        Log.v(TAG, "onPause 5");
         super.onPause();
     }
 
     @Override
     public void onStop() {
         Log.v(TAG, "onStop");
-        synchronized (mSync) {
+        //synchronized (mSync) {
             releaseCamera();
             if (mUSBMonitor != null) {
                 mUSBMonitor.unregister();
                 mUSBMonitor.destroy();
                 mUSBMonitor = null;
             }
-        }
-
+        //}
         super.onStop();
+    }
+
+    @Override
+    public void onDestroy() {
+        Log.v(TAG, "onDestroy");
+        super.onDestroy();
     }
 
     private final USBMonitor.OnDeviceConnectListener mOnDeviceConnectListener
@@ -257,14 +245,26 @@ public class ExternalCameraConnectionFragment extends Fragment {
                 camera.setPreviewDisplay(mPreviewSurface);
 				camera.setFrameCallback(mIFrameCallback, UVCCamera.PIXEL_FORMAT_YUV420SP);
 
-                /////////////////////
                 Log.v(TAG, "get supported sizes list...");
                 List<com.serenegiant.usb.Size> supportedSizes = camera.getSupportedSizeList();
+                List<Size> supportedResolutions = new ArrayList<Size>();
                 for(com.serenegiant.usb.Size size : supportedSizes) {
                     Log.v(TAG, "supported size: " + "[" + size.width + ":" + size.height + "]");
+                    //skip default resolution
+                    if (size.width == 640 && size.height == 480) {
+                        continue;
+                    }
+                    supportedResolutions.add(new Size(size.width, size.height));
                 }
 
-                //////////////////////
+                // Update supported resolution spinner in the UI thread
+                final Activity activity = getActivity();
+                activity.runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        supportedResolutionsCallback.onSupportedResolutionsFound(supportedResolutions);
+                    }
+                });
 
                 camera.startPreview();
             }
@@ -305,6 +305,7 @@ public class ExternalCameraConnectionFragment extends Fragment {
     };
 
     private synchronized void releaseCamera() {
+        Log.v(TAG, "releaseCamera() start");
         synchronized (mSync) {
             if (mUVCCamera != null) {
                 try {
@@ -322,6 +323,7 @@ public class ExternalCameraConnectionFragment extends Fragment {
                 mPreviewSurface = null;
             }
         }
+        Log.v(TAG, "releaseCamera() end");
     }
 
     /**
@@ -330,6 +332,10 @@ public class ExternalCameraConnectionFragment extends Fragment {
      */
     public interface ConnectionCallback {
         void onPreviewSizeChosen(Size size, int cameraRotation);
+    }
+
+    public interface SupportedResolutionsCallback {
+        void onSupportedResolutionsFound(List<Size> resolutions);
     }
 
     private void setUpCameraOutputs() {

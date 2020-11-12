@@ -61,14 +61,18 @@ public class ImageUtils {
    * @param filename The location to save the bitmap to.
    */
   public static void saveBitmap(final Bitmap bitmap, final String filename) {
-    final String root =
-        Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + "tensorflow";
+    //final String root =
+    //    Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + "tensorflow";
+
+    final String root = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DCIM) + File.separator + "Camera" + File.separator + "tflite";
+
     LOGGER.i("Saving %dx%d bitmap to %s.", bitmap.getWidth(), bitmap.getHeight(), root);
     final File myDir = new File(root);
 
-    if (!myDir.mkdirs()) {
-      LOGGER.i("Make dir failed");
-    }
+    //if (!myDir.mkdirs()) {
+    //  LOGGER.i("Make dir failed");
+    //}
 
     final String fname = filename;
     final File file = new File(myDir, fname);
