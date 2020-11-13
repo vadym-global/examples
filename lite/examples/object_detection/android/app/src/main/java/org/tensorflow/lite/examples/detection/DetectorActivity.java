@@ -17,15 +17,12 @@
 package org.tensorflow.lite.examples.detection;
 
 import static org.opencv.core.Core.BORDER_CONSTANT;
-import static org.opencv.core.Core.BORDER_REPLICATE;
 import static org.opencv.core.Core.copyMakeBorder;
-import static org.opencv.core.CvType.CV_8UC3;
 
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.Config;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Paint.Style;
 import android.graphics.RectF;
@@ -34,7 +31,11 @@ import android.media.ImageReader.OnImageAvailableListener;
 import android.os.SystemClock;
 import android.util.Size;
 import android.util.TypedValue;
+import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.Toast;
+import android.widget.ToggleButton;
+
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -89,6 +90,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private BorderedText borderedText;
   private Mat mRgbImageMat;
   private int mPaddingImageSize;
+  ToggleButton toggleCrop;
+  EditText editTextNumberTopX;
+  EditText editTextNumberTopY;
+  EditText editTextWidth;
+  EditText editTextHeight;
+
+  int topX, topY, width, height;
+
   int mBottom = 0, mTop = 0, mRight = 0, mLeft = 0;
 
   private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
@@ -170,6 +179,50 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         });
 
     tracker.setFrameConfiguration(previewWidth, previewHeight, sensorOrientation);
+
+    editTextNumberTopX = (EditText) findViewById(R.id.editTextNumberTopX);
+    editTextNumberTopY = (EditText) findViewById(R.id.editTextNumberTopY);
+    editTextWidth = (EditText) findViewById(R.id.editTextNumberWidth);
+    editTextHeight = (EditText) findViewById(R.id.editTextNumberHeight);
+    toggleCrop = (ToggleButton) findViewById(R.id.toggleButton);
+
+    toggleCrop.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+      public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+        if (isChecked) {
+         LOGGER.i("Enable crop");
+         String x, y, w, h;
+         x = editTextNumberTopX.getText().toString();
+         y = editTextNumberTopY.getText().toString();
+         w = editTextWidth.getText().toString();
+         h = editTextHeight.getText().toString();
+
+         if (x == null || x.isEmpty() || y == null || y.isEmpty() ||
+                 y == null || y.isEmpty() || y == null || y.isEmpty()) {
+           Toast.makeText(
+                   getApplicationContext(),
+                   "Empty crop data",
+                   Toast.LENGTH_LONG).show();
+           buttonView.setChecked(false);
+           return;
+         }
+         topX = Integer.parseInt(x);
+         topY = Integer.parseInt(y);
+         width = Integer.parseInt(w);
+         height = Integer.parseInt(h);
+
+         if ( (topX + width > previewWidth) || (topY + height > previewHeight)) {
+           Toast.makeText(
+                   getApplicationContext(),
+                   "Crop rectangle exceeds the borders of the frame",
+                   Toast.LENGTH_LONG).show();
+           buttonView.setChecked(false);
+         }
+
+        } else {
+          LOGGER.i("Disable crop");
+        }
+      }
+    });
   }
 
   @Override
@@ -190,6 +243,29 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     mRgbImageMat = new Mat();
     Utils.bitmapToMat(rgbFrameBitmap, mRgbImageMat);
+
+    int imageWidth, imageHeight;
+    Mat cropMat = null, processImage;
+
+    if (toggleCrop.isChecked()) {
+      LOGGER.i("toggleCrop is checked!");
+
+      Rect rectCrop = new Rect(topX, topY, width, height);
+      cropMat = new Mat(mRgbImageMat, rectCrop);
+
+      Bitmap cropBitmap = Bitmap.createBitmap(width, height, Config.ARGB_8888);
+      Utils.matToBitmap(cropMat, cropBitmap);
+      ImageUtils.saveBitmap(cropBitmap, "cropped.png");
+
+
+      imageWidth = width;
+      imageHeight = height;
+    } else {
+      LOGGER.i("toggleCrop is not checked!");
+      imageWidth = previewWidth;
+      imageHeight = previewHeight;
+    }
+
     Scalar color = new Scalar( 0.0, 0.0, 0.0, 255.0 );
     Mat bordersImage = new Mat();
     Mat resizeImage = new Mat();
@@ -198,18 +274,20 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     mTop = 0;
     mRight = 0;
     mLeft = 0;
-    if (previewWidth > previewHeight) {
-      mBottom = mTop = (previewWidth - previewHeight) / 2;
-    } else if (previewWidth < previewHeight){
-      mRight = mLeft = (previewHeight - previewWidth) / 2;
+    if (imageWidth > imageHeight) {
+      mBottom = mTop = (imageWidth - imageHeight) / 2;
+    } else if (imageWidth < imageHeight){
+      mRight = mLeft = (imageHeight - imageWidth) / 2;
     }
-    Core.copyMakeBorder(mRgbImageMat, bordersImage, mTop, mBottom, mLeft, mRight, BORDER_CONSTANT, color);
+
+    processImage = toggleCrop.isChecked() ? cropMat : mRgbImageMat;
+    Core.copyMakeBorder(processImage, bordersImage, mTop, mBottom, mLeft, mRight, BORDER_CONSTANT, color);
     org.opencv.core.Size size = new org.opencv.core.Size(300, 300);
     Imgproc.resize(bordersImage, resizeImage, size );
     Bitmap opencvResizeimageBitmap = Bitmap.createBitmap(300, 300, Config.ARGB_8888);
     Utils.matToBitmap(resizeImage, opencvResizeimageBitmap);
 
-    mPaddingImageSize = Math.max(previewWidth, previewHeight);
+    mPaddingImageSize = Math.max(imageWidth, imageHeight);
 
     readyForNextImage();
 
@@ -258,6 +336,13 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                 location.bottom = location.bottom * resizeRatio - mBottom;
                 location.right = location.right * resizeRatio - mRight;
                 location.left = location.left * resizeRatio - mLeft;
+
+                if (toggleCrop.isChecked()) {
+                  location.top = location.top + topY;
+                  location.bottom = location.bottom + topY;
+                  location.right = location.right + topX;
+                  location.left = location.left + topX;
+                }
 
                 result.setLocation(location);
                 mappedRecognitions.add(result);

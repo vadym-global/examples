@@ -184,13 +184,117 @@
             android:visibility="visible" />
     </LinearLayout>
 
+    <!-- TODO(b/112541284): Unhide when new NNAPI delegate is used. -->
+
     <View
         android:layout_width="match_parent"
         android:layout_height="1px"
         android:layout_marginTop="10dp"
         android:background="@android:color/darker_gray" />
 
-    <!-- TODO(b/112541284): Unhide when new NNAPI delegate is used. -->
+    <LinearLayout
+        android:id="@+id/cropLayout1"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/textViewTopX"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TopX"
+            android:textColor="#000000" />
+
+        <EditText
+            android:id="@+id/editTextNumberTopX"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1"
+            android:ems="10"
+            android:inputType="number" />
+
+        <TextView
+            android:id="@+id/textViewWidth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Width" />
+
+        <EditText
+            android:id="@+id/editTextNumberWidth"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1"
+            android:ems="10"
+            android:inputType="number" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/cropLayout2"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/textViewTopY"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="TopY" />
+
+        <EditText
+            android:id="@+id/editTextNumberTopY"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1"
+            android:ems="10"
+            android:inputType="number" />
+
+        <TextView
+            android:id="@+id/textViewHeight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Height" />
+
+        <EditText
+            android:id="@+id/editTextNumberHeight"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_weight="1"
+            android:ems="10"
+            android:inputType="number" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="horizontal">
+
+        <ToggleButton
+            android:id="@+id/toggleButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="ToggleButton"
+            android:textOff="Crop is off"
+            android:textOn="Crop is on" />
+    </LinearLayout>
+
+    <View
+        android:id="@+id/view2"
+        android:layout_width="match_parent"
+        android:layout_height="1px"
+        android:layout_marginTop="10dp"
+        android:layout_weight="1"
+        android:background="@android:color/darker_gray" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
