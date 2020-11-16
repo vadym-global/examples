@@ -343,7 +343,7 @@ public class ExternalCameraConnectionFragment extends Fragment {
         previewSize = inputSize;
         // We fit the aspect ratio of TextureView to the size of preview we picked.
         final int orientation = getResources().getConfiguration().orientation;
-        if (orientation != Configuration.ORIENTATION_LANDSCAPE) {
+        if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
             textureView.setAspectRatio(previewSize.getWidth(), previewSize.getHeight());
         } else {
             textureView.setAspectRatio(previewSize.getHeight(), previewSize.getWidth());
@@ -366,7 +366,8 @@ public class ExternalCameraConnectionFragment extends Fragment {
         if (null == textureView || null == previewSize || null == activity) {
             return;
         }
-        final int rotation = activity.getWindowManager().getDefaultDisplay().getRotation();
+        final int rotation = Surface.ROTATION_0;//activity.getWindowManager().getDefaultDisplay().getRotation();
+        Log.v(TAG, "rotation = " + rotation);
         final Matrix matrix = new Matrix();
         final RectF viewRect = new RectF(0, 0, viewWidth, viewHeight);
         final RectF bufferRect = new RectF(0, 0, previewSize.getHeight(), previewSize.getWidth());

@@ -150,7 +150,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     previewWidth = size.getWidth();
     previewHeight = size.getHeight();
 
-    sensorOrientation = rotation - getScreenOrientation();
+    sensorOrientation = 0;//rotation - getScreenOrientation();
     LOGGER.i("Camera orientation relative to screen canvas: [%d - %d] = %d", rotation, getScreenOrientation(), sensorOrientation);
 
     LOGGER.i("Initializing at size %dx%d", previewWidth, previewHeight);
