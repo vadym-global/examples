@@ -68,6 +68,9 @@ public class MultiBoxTracker {
   private int frameHeight;
   private int sensorOrientation;
 
+  private boolean enableCropRectangle = false;
+  private RectF cropRectangle = null;
+
   public MultiBoxTracker(final Context context) {
     for (final int color : COLORS) {
       availableColors.add(color);
@@ -134,6 +137,22 @@ public class MultiBoxTracker {
             (int) (multiplier * (rotated ? frameWidth : frameHeight)),
             sensorOrientation,
             false);
+
+    // Draw cropped area
+    /////////////////////
+    final RectF cropAreaRect = new RectF(cropRectangle);
+    if (enableCropRectangle) {
+      Paint paint = new Paint();
+      paint.setColor(Color.CYAN);
+      paint.setStyle(Style.STROKE);
+      paint.setStrokeWidth(4.0f);
+      getFrameToCanvasMatrix().mapRect(cropAreaRect);
+      canvas.drawRect(cropAreaRect, paint);
+      borderedText.drawText(
+              canvas, cropAreaRect.left, cropAreaRect.top, "CROPPED AREA", paint);
+    }
+    ////////////////////////////
+
     for (final TrackedRecognition recognition : trackedObjects) {
       final RectF trackedPos = new RectF(recognition.location);
 
@@ -141,6 +160,12 @@ public class MultiBoxTracker {
       boxPaint.setColor(recognition.color);
 
       float cornerSize = Math.min(trackedPos.width(), trackedPos.height()) / 8.0f;
+      if (enableCropRectangle) {
+        // check if detected object is inside cropped area, otherwise drop it
+        if (!cropAreaRect.contains(trackedPos)) {
+          continue;
+        }
+      }
       canvas.drawRoundRect(trackedPos, cornerSize, cornerSize, boxPaint);
 
       final String labelString =
@@ -151,6 +176,17 @@ public class MultiBoxTracker {
       // labelString);
       borderedText.drawText(
           canvas, trackedPos.left + cornerSize, trackedPos.top, labelString + "%", boxPaint);
+    }
+  }
+
+  public synchronized void setCropRectangle(final RectF rect, boolean enable) {
+
+    enableCropRectangle = enable;
+
+    if (enable) {
+      cropRectangle = rect;
+    } else {
+      cropRectangle = null;
     }
   }
 

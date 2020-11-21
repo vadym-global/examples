@@ -91,6 +91,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private Mat mRgbImageMat;
   private int mPaddingImageSize;
   ToggleButton toggleCrop;
+  ToggleButton toggleDisplayCropRegion;
   EditText editTextNumberTopX;
   EditText editTextNumberTopY;
   EditText editTextWidth;
@@ -185,45 +186,80 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     editTextWidth = (EditText) findViewById(R.id.editTextNumberWidth);
     editTextHeight = (EditText) findViewById(R.id.editTextNumberHeight);
     toggleCrop = (ToggleButton) findViewById(R.id.toggleButton);
+    toggleDisplayCropRegion = (ToggleButton) findViewById(R.id.toggleButtonShowCropRect);
+
 
     toggleCrop.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
       public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
         if (isChecked) {
-         LOGGER.i("Enable crop");
-         String x, y, w, h;
-         x = editTextNumberTopX.getText().toString();
-         y = editTextNumberTopY.getText().toString();
-         w = editTextWidth.getText().toString();
-         h = editTextHeight.getText().toString();
+          LOGGER.i("Enable crop");
+          String x, y, w, h;
+          x = editTextNumberTopX.getText().toString();
+          y = editTextNumberTopY.getText().toString();
+          w = editTextWidth.getText().toString();
+          h = editTextHeight.getText().toString();
 
-         if (x == null || x.isEmpty() || y == null || y.isEmpty() ||
-                 y == null || y.isEmpty() || y == null || y.isEmpty()) {
-           Toast.makeText(
+          if (x == null || x.isEmpty() || y == null || y.isEmpty() ||
+                  y == null || y.isEmpty() || y == null || y.isEmpty()) {
+            Toast.makeText(
                    getApplicationContext(),
                    "Empty crop data",
                    Toast.LENGTH_LONG).show();
-           buttonView.setChecked(false);
-           return;
-         }
-         topX = Integer.parseInt(x);
-         topY = Integer.parseInt(y);
-         width = Integer.parseInt(w);
-         height = Integer.parseInt(h);
+            buttonView.setChecked(false);
+            tracker.setCropRectangle(null, false);
+            toggleDisplayCropRegion.setChecked(false);
+            return;
+          }
+          topX = Integer.parseInt(x);
+          topY = Integer.parseInt(y);
+          width = Integer.parseInt(w);
+          height = Integer.parseInt(h);
 
-         if ( (topX + width > previewWidth) || (topY + height > previewHeight)) {
-           Toast.makeText(
+          if ( (topX + width > previewWidth) || (topY + height > previewHeight)) {
+            Toast.makeText(
                    getApplicationContext(),
                    "Crop rectangle exceeds the borders of the frame",
-                   Toast.LENGTH_LONG).show();
-           buttonView.setChecked(false);
-         }
+                   Toast.LENGTH_SHORT).show();
+            buttonView.setChecked(false);
+            tracker.setCropRectangle(null, false);
+            toggleDisplayCropRegion.setChecked(false);
+          }
 
         } else {
           LOGGER.i("Disable crop");
+          tracker.setCropRectangle(null, false);
+          toggleDisplayCropRegion.setChecked(false);
+        }
+      }
+    });
+
+    toggleDisplayCropRegion.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
+      public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+        if (isChecked) {
+          LOGGER.i("Display crop region");
+          if (toggleCrop.isChecked()) {
+            // Path cropped rectangle for rendering
+            //final RectF cropRectangle = new RectF(160, 120, 480, 360);
+            final RectF cropRectangle = new RectF(topX, topY, topX + width, topY + height);
+            tracker.setCropRectangle(cropRectangle, true);
+          } else {
+            toggleDisplayCropRegion.setChecked(false);
+            Toast.makeText(
+                    getApplicationContext(),
+                    "Enable crop to display the cropping region",
+                    Toast.LENGTH_SHORT).show();
+          }
+        } else {
+          LOGGER.i("Undisplay crop region");
+          if (toggleCrop.isChecked()) {
+            tracker.setCropRectangle(null, false);
+          }
         }
       }
     });
   }
+
+
 
   @Override
   protected void processImage() {
@@ -413,5 +449,16 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
                 });
           }
         });
+  }
+
+  @Override
+  public synchronized void onStop() {
+    super.onStop();
+    toggleCrop.setChecked(false);
+  }
+
+  @Override
+  protected void disableCrop() {
+    toggleCrop.setChecked(false);
   }
 }

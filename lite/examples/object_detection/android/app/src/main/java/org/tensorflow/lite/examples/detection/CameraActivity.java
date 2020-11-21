@@ -214,6 +214,7 @@ public abstract class CameraActivity extends AppCompatActivity
       String [] res = resolution.split("x");
       cameraResolution = resolutionFromString(resolution);
 
+      disableCrop();
       setFragment(cameraResolution);
     }
   }
@@ -428,6 +429,8 @@ public abstract class CameraActivity extends AppCompatActivity
     handlerThread = new HandlerThread("inference");
     handlerThread.start();
     handler = new Handler(handlerThread.getLooper());
+
+    setFragment(cameraResolution);
   }
 
   @Override
@@ -712,4 +715,6 @@ public abstract class CameraActivity extends AppCompatActivity
   protected abstract void setNumThreads(int numThreads);
 
   protected abstract void setUseNNAPI(boolean isChecked);
+
+  protected abstract void disableCrop();
 }
