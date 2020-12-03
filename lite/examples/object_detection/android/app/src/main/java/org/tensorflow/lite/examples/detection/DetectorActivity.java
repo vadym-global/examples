@@ -223,6 +223,9 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
             buttonView.setChecked(false);
             tracker.setCropRectangle(null, false);
             toggleDisplayCropRegion.setChecked(false);
+          } else {
+            final RectF cropRectangle = new RectF(topX, topY, topX + width, topY + height);
+            tracker.setCropRectangle(cropRectangle, false);
           }
 
         } else {
@@ -235,12 +238,14 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     toggleDisplayCropRegion.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
       public void onCheckedChanged(CompoundButton buttonView, boolean isChecked) {
+        final RectF cropRectangle = new RectF(topX, topY, topX + width, topY + height);
+
         if (isChecked) {
           LOGGER.i("Display crop region");
           if (toggleCrop.isChecked()) {
             // Path cropped rectangle for rendering
             //final RectF cropRectangle = new RectF(160, 120, 480, 360);
-            final RectF cropRectangle = new RectF(topX, topY, topX + width, topY + height);
+
             tracker.setCropRectangle(cropRectangle, true);
           } else {
             toggleDisplayCropRegion.setChecked(false);
@@ -252,7 +257,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         } else {
           LOGGER.i("Undisplay crop region");
           if (toggleCrop.isChecked()) {
-            tracker.setCropRectangle(null, false);
+            tracker.setCropRectangle(cropRectangle, false);
           }
         }
       }

@@ -141,12 +141,15 @@ public class MultiBoxTracker {
     // Draw cropped area
     /////////////////////
     final RectF cropAreaRect = new RectF(cropRectangle);
+    if (cropRectangle != null) {
+      getFrameToCanvasMatrix().mapRect(cropAreaRect);
+    }
+
     if (enableCropRectangle) {
       Paint paint = new Paint();
       paint.setColor(Color.CYAN);
       paint.setStyle(Style.STROKE);
       paint.setStrokeWidth(4.0f);
-      getFrameToCanvasMatrix().mapRect(cropAreaRect);
       canvas.drawRect(cropAreaRect, paint);
       borderedText.drawText(
               canvas, cropAreaRect.left, cropAreaRect.top, "CROPPED AREA", paint);
@@ -160,7 +163,7 @@ public class MultiBoxTracker {
       boxPaint.setColor(recognition.color);
 
       float cornerSize = Math.min(trackedPos.width(), trackedPos.height()) / 8.0f;
-      if (enableCropRectangle) {
+      if (cropRectangle != null) {
         // check if detected object is inside cropped area, otherwise drop it
         if (!cropAreaRect.contains(trackedPos)) {
           continue;
@@ -180,14 +183,8 @@ public class MultiBoxTracker {
   }
 
   public synchronized void setCropRectangle(final RectF rect, boolean enable) {
-
     enableCropRectangle = enable;
-
-    if (enable) {
-      cropRectangle = rect;
-    } else {
-      cropRectangle = null;
-    }
+    cropRectangle = rect;
   }
 
   private void processResults(final List<Recognition> results) {
