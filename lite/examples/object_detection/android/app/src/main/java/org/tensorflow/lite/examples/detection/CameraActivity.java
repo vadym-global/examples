@@ -20,6 +20,7 @@ import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -47,6 +48,7 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -56,12 +58,17 @@ import android.widget.Toast;
 import android.widget.ToggleButton;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
+import org.tensorflow.lite.examples.detection.VideoFrame;
 
 import com.serenegiant.usb.IFrameCallback;
 
@@ -71,7 +78,8 @@ public abstract class CameraActivity extends AppCompatActivity
         CompoundButton.OnCheckedChangeListener,
         View.OnClickListener,
         IFrameCallback,
-        AdapterView.OnItemSelectedListener {
+        AdapterView.OnItemSelectedListener,
+        VideoFrame {
   private static final Logger LOGGER = new Logger();
 
   private static final int PERMISSIONS_REQUEST = 1;
@@ -102,7 +110,9 @@ public abstract class CameraActivity extends AppCompatActivity
   private Spinner resolutionSpinner;
   private ArrayAdapter<String> adapter;
   private Size cameraResolution;
+  private Button openFileButton;
   List<String> supportedResolutions;
+  private String currVideofile;
 
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
@@ -131,7 +141,7 @@ public abstract class CameraActivity extends AppCompatActivity
     sheetBehavior = BottomSheetBehavior.from(bottomSheetLayout);
     bottomSheetArrowImageView = findViewById(R.id.bottom_sheet_arrow);
     resolutionSpinner = findViewById(R.id.resolutionSpinner);
-
+    openFileButton = findViewById(R.id.button_open_video);
 
     cameraResolution = new Size(640, 480);
 
@@ -143,6 +153,7 @@ public abstract class CameraActivity extends AppCompatActivity
     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
     resolutionSpinner.setAdapter(adapter);
     resolutionSpinner.setOnItemSelectedListener(this);
+    openFileButton.setOnClickListener(buttonOpenClick);
 
     ViewTreeObserver vto = gestureLayout.getViewTreeObserver();
     vto.addOnGlobalLayoutListener(
@@ -245,6 +256,24 @@ public abstract class CameraActivity extends AppCompatActivity
     return yuvBytes[0];
   }
 
+  protected  View.OnClickListener buttonOpenClick = new View.OnClickListener() {
+    @Override
+    public void onClick(View v) {
+      LOGGER.d("Button on click");
+      OpenFileDialog fileDialog = new OpenFileDialog(CameraActivity.this);
+      OpenFileDialog.OpenDialogListener  listener = new OpenFileDialog.OpenDialogListener() {
+        @Override
+        public void OnSelectedFile(String fileName) {
+          currVideofile = fileName;
+          LOGGER.d("Video file " + currVideofile);
+          setFragment(cameraResolution);
+        }
+      };
+      fileDialog.setOpenDialogListener(listener);
+      fileDialog.show();
+    }
+  };
+
   /** Callback for android.hardware.Camera API */
   @Override
   public void onPreviewFrame(final byte[] bytes, final Camera camera) {
@@ -294,6 +323,8 @@ public abstract class CameraActivity extends AppCompatActivity
   @Override
   public void onImageAvailable(final ImageReader reader) {
     // We need wait until we have some size from onPreviewSizeChosen
+    LOGGER.d("DBG Camera2 API");
+
     if (previewWidth == 0 || previewHeight == 0) {
       return;
     }
@@ -414,6 +445,58 @@ public abstract class CameraActivity extends AppCompatActivity
     }
     Trace.endSection();
   }
+
+  @Override
+  public void onVideoFrameData(Bitmap bmp) {
+    LOGGER.d("onVideoFrame start prev pW " + previewWidth +" ph " + previewHeight);
+    if (bmp == null ) {
+      LOGGER.d("VidoeFrame == null");
+      return;
+    }
+    previewHeight = bmp.getHeight();
+    previewWidth = bmp.getWidth();
+
+    if (previewWidth == 0 || previewHeight == 0) {
+      LOGGER.d("We need wait until we have some size from onPreviewSizeChosen");
+      return;
+    }
+    if (rgbBytes == null) {
+      rgbBytes = new int[bmp.getByteCount()/4];
+    }
+
+    if (isProcessingFrame) {
+      LOGGER.d("Drop frame");
+      return;
+    }
+
+    isProcessingFrame = true;
+    LOGGER.d("VideoFrame: imageAvailable");
+
+    imageConverter =
+            new Runnable() {
+              @Override
+              public void run() {
+                LOGGER.d("converter not needed ");
+                int imageSize = bmp.getRowBytes() * bmp.getHeight();
+                IntBuffer uncompressedBuffer = IntBuffer.allocate( imageSize);
+                bmp.copyPixelsToBuffer(uncompressedBuffer);
+
+                rgbBytes = Arrays.copyOfRange(uncompressedBuffer.array(),0,uncompressedBuffer.array().length);
+              }
+            };
+
+    postInferenceCallback =
+            new Runnable() {
+              @Override
+              public void run() {
+                  isProcessingFrame = false;
+              }
+            };
+
+    processImage();
+    LOGGER.d("onVideoFrame end");
+  }
+
 
   @Override
   public synchronized void onStart() {
@@ -566,13 +649,35 @@ public abstract class CameraActivity extends AppCompatActivity
     Fragment fragment;
 
     if (useCamera2API) {
-      /*CameraConnectionFragment camera2Fragment =
+
+      VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
+              new VideoPlaybackFragment.ConnectionCallback() {
+                @Override
+                public void onPreviewSizeChosen(Size size, int cameraRotation) {
+                  previewHeight = size.getHeight();
+                  previewWidth = size.getWidth();
+                  rgbBytes = null;
+                  CameraActivity.this.onPreviewSizeChosen(size, cameraRotation);
+                }
+              },
+              this,
+              this,
+              getLayoutId(),
+              getDesiredPreviewFrameSize(),
+              currVideofile
+      );
+      fragment = video2Fragment;
+/*
+
+
+      CameraConnectionFragment camera2Fragment =
           CameraConnectionFragment.newInstance(
               new CameraConnectionFragment.ConnectionCallback() {
                 @Override
                 public void onPreviewSizeChosen(final Size size, final int rotation) {
                   previewHeight = size.getHeight();
                   previewWidth = size.getWidth();
+                  LOGGER.d("camre w=" + previewHeight + " h="+ previewHeight);
                   CameraActivity.this.onPreviewSizeChosen(size, rotation);
                 }
               },
@@ -581,7 +686,7 @@ public abstract class CameraActivity extends AppCompatActivity
               getDesiredPreviewFrameSize());
 
       camera2Fragment.setCamera(cameraId);
-      fragment = camera2Fragment;*/
+      fragment = camera2Fragment;
 
       ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
               new ExternalCameraConnectionFragment.ConnectionCallback() {
@@ -611,7 +716,7 @@ public abstract class CameraActivity extends AppCompatActivity
               });
 
       fragment = externalCameraFrag;
-
+      */
       //R.layout.tfe_od_camera_connection_fragment_tracking;
 
       /*VideoPlaybackFragment videoFragment = VideoPlaybackFragment.newInstance(
