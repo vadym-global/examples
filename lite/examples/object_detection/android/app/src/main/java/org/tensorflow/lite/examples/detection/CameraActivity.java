@@ -85,6 +85,7 @@ public abstract class CameraActivity extends AppCompatActivity
   private static final int PERMISSIONS_REQUEST = 1;
 
   private static final String PERMISSION_CAMERA = Manifest.permission.CAMERA;
+  private static final String PERMISSION_SDCARD = Manifest.permission.READ_EXTERNAL_STORAGE;
   protected int previewWidth = 0;
   protected int previewHeight = 0;
   private boolean debug = false;
@@ -323,7 +324,6 @@ public abstract class CameraActivity extends AppCompatActivity
   @Override
   public void onImageAvailable(final ImageReader reader) {
     // We need wait until we have some size from onPreviewSizeChosen
-    LOGGER.d("DBG Camera2 API");
 
     if (previewWidth == 0 || previewHeight == 0) {
       return;
@@ -574,7 +574,9 @@ public abstract class CameraActivity extends AppCompatActivity
 
   private boolean hasPermission() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      return checkSelfPermission(PERMISSION_CAMERA) == PackageManager.PERMISSION_GRANTED;
+      int camera = checkSelfPermission(PERMISSION_CAMERA);
+      int sdcard = checkCallingPermission(PERMISSION_SDCARD);
+      return (camera == PackageManager.PERMISSION_GRANTED) && (sdcard == PackageManager.PERMISSION_GRANTED);
     } else {
       return true;
     }
@@ -589,7 +591,14 @@ public abstract class CameraActivity extends AppCompatActivity
                 Toast.LENGTH_LONG)
             .show();
       }
-      requestPermissions(new String[] {PERMISSION_CAMERA}, PERMISSIONS_REQUEST);
+      if (shouldShowRequestPermissionRationale(PERMISSION_SDCARD)) {
+        Toast.makeText(
+                CameraActivity.this,
+                "Read SDCARD permission is required for this demo",
+                Toast.LENGTH_LONG)
+                .show();
+      }
+      requestPermissions(new String[] {PERMISSION_CAMERA, PERMISSION_SDCARD}, PERMISSIONS_REQUEST);
     }
   }
 
@@ -649,7 +658,7 @@ public abstract class CameraActivity extends AppCompatActivity
     Fragment fragment;
 
     if (useCamera2API) {
-
+/*
       VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
               new VideoPlaybackFragment.ConnectionCallback() {
                 @Override
@@ -667,7 +676,7 @@ public abstract class CameraActivity extends AppCompatActivity
               currVideofile
       );
       fragment = video2Fragment;
-/*
+*/
 
 
       CameraConnectionFragment camera2Fragment =
@@ -687,7 +696,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
       camera2Fragment.setCamera(cameraId);
       fragment = camera2Fragment;
-
+/*
       ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
               new ExternalCameraConnectionFragment.ConnectionCallback() {
                 @Override
