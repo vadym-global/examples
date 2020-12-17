@@ -143,9 +143,9 @@ public class VideoPlaybackFragment extends Fragment {
                 public void onSurfaceTextureAvailable(
                         final SurfaceTexture texture, final int width, final int height) {
                     //openCamera(width, height);
-
                     previewSize = new Size(640, 480);
 
+                    textureView.setAspectRatio(640,480);
                     LOGGER.d("width = " + width + " height = " + height);
                     Surface surface = new Surface(texture);
                     try {
@@ -206,7 +206,7 @@ public class VideoPlaybackFragment extends Fragment {
                 @Override
                 public void onSurfaceTextureSizeChanged(
                         final SurfaceTexture texture, final int width, final int height) {
-                    //configureTransform(width, height);
+                    configureTransform(width, height);
                 }
 
                 @Override

@@ -113,7 +113,8 @@ public abstract class CameraActivity extends AppCompatActivity
   private Size cameraResolution;
   private Button openFileButton;
   List<String> supportedResolutions;
-  private String currVideofile;
+  private String currVideofile = "";
+  private Fragment mFragment;
 
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
@@ -655,11 +656,12 @@ public abstract class CameraActivity extends AppCompatActivity
 
   protected void setFragment(Size cameraResolution) {
     String cameraId = chooseCamera();
-    Fragment fragment;
 
     if (useCamera2API) {
-/*
-      VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
+      if (mFragment == null && !"".equals(currVideofile)) {
+        LOGGER.e("NDBG set current file name =  " + currVideofile);
+
+        VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
               new VideoPlaybackFragment.ConnectionCallback() {
                 @Override
                 public void onPreviewSizeChosen(Size size, int cameraRotation) {
@@ -675,27 +677,30 @@ public abstract class CameraActivity extends AppCompatActivity
               getDesiredPreviewFrameSize(),
               currVideofile
       );
-      fragment = video2Fragment;
+      mFragment = video2Fragment;
+
+      /*
+
+
+        CameraConnectionFragment camera2Fragment =
+                CameraConnectionFragment.newInstance(
+                        new CameraConnectionFragment.ConnectionCallback() {
+                          @Override
+                          public void onPreviewSizeChosen(final Size size, final int rotation) {
+                            previewHeight = size.getHeight();
+                            previewWidth = size.getWidth();
+                            LOGGER.d("camera  w=" + previewHeight + " h=" + previewHeight);
+                            CameraActivity.this.onPreviewSizeChosen(size, rotation);
+                          }
+                        },
+                        this,
+                        getLayoutId(),
+                        getDesiredPreviewFrameSize());
+
+        camera2Fragment.setCamera(cameraId);
+        mFragment = camera2Fragment;
+
 */
-
-
-      CameraConnectionFragment camera2Fragment =
-          CameraConnectionFragment.newInstance(
-              new CameraConnectionFragment.ConnectionCallback() {
-                @Override
-                public void onPreviewSizeChosen(final Size size, final int rotation) {
-                  previewHeight = size.getHeight();
-                  previewWidth = size.getWidth();
-                  LOGGER.d("camre w=" + previewHeight + " h="+ previewHeight);
-                  CameraActivity.this.onPreviewSizeChosen(size, rotation);
-                }
-              },
-              this,
-              getLayoutId(),
-              getDesiredPreviewFrameSize());
-
-      camera2Fragment.setCamera(cameraId);
-      fragment = camera2Fragment;
 /*
       ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
               new ExternalCameraConnectionFragment.ConnectionCallback() {
@@ -726,7 +731,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
       fragment = externalCameraFrag;
       */
-      //R.layout.tfe_od_camera_connection_fragment_tracking;
+        //R.layout.tfe_od_camera_connection_fragment_tracking;
 
       /*VideoPlaybackFragment videoFragment = VideoPlaybackFragment.newInstance(
               this,
@@ -734,12 +739,15 @@ public abstract class CameraActivity extends AppCompatActivity
               getDesiredPreviewFrameSize());
 
       fragment = videoFragment;*/
+      }
     } else {
-      fragment =
+      mFragment =
           new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());
     }
 
-    getFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
+    if (mFragment!=null) {
+      getFragmentManager().beginTransaction().replace(R.id.container, mFragment).commit();
+    }
   }
 
   protected void fillBytes(final Plane[] planes, final byte[][] yuvBytes) {
