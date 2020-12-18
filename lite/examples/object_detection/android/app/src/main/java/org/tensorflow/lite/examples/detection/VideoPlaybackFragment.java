@@ -25,7 +25,10 @@ import android.app.Fragment;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.res.AssetFileDescriptor;
+import android.content.res.AssetManager;
 import android.content.res.Configuration;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.RectF;
@@ -43,8 +46,11 @@ import android.media.ImageReader;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.media.MediaPlayer;
 import android.media.PlaybackParams;
+import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.CountDownTimer;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.text.TextUtils;
@@ -57,6 +63,10 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Toast;
 
+import com.serenegiant.usb.IFrameCallback;
+
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -90,8 +100,8 @@ public class VideoPlaybackFragment extends Fragment {
         ORIENTATIONS.append(Surface.ROTATION_270, 180);
     }
 
-    private MediaPlayer mediaPlayer;
-    private MediaPlayer mediaPlayer2;
+    private MediaPlayer xMediaPlayer;
+    private MediaPlayer xediaPlayer2;
     private ImageReader mImageReader;
     AssetFileDescriptor fileDescriptor;
 
@@ -109,6 +119,18 @@ public class VideoPlaybackFragment extends Fragment {
     private Handler backgroundHandler;
     /** The {@link Size} of camera preview. */
     private Size previewSize;
+    private final VideoFrame mFrameCallback;
+    private final String vidname;
+
+
+    CountDownTimer timer;
+    int framecount = 0;
+
+    public interface ConnectionCallback {
+        void onPreviewSizeChosen(Size size, int cameraRotation);
+    }
+
+    private final ConnectionCallback playbackConnectionCallback;
 
     /**
      * {@link TextureView.SurfaceTextureListener} handles several lifecycle events on a {@link
@@ -116,30 +138,65 @@ public class VideoPlaybackFragment extends Fragment {
      */
     private final TextureView.SurfaceTextureListener surfaceTextureListener =
             new TextureView.SurfaceTextureListener() {
+                @SuppressLint("SdCardPath")
                 @Override
                 public void onSurfaceTextureAvailable(
                         final SurfaceTexture texture, final int width, final int height) {
                     //openCamera(width, height);
-
                     previewSize = new Size(640, 480);
 
-                    LOGGER.d("width = " + width + "height = " + height);
+                    textureView.setAspectRatio(640,480);
+                    LOGGER.d("width = " + width + " height = " + height);
                     Surface surface = new Surface(texture);
                     try {
-                        mediaPlayer.setSurface(surface);
+                        xMediaPlayer.setSurface(surface);
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                            mediaPlayer.setDataSource("/sdcard/Movies/Never_Settle.mp4");
+                            //xMediaPlayer.setDataSource( Environment.getExternalStorageDirectory()+"/Movies/t3.mp4");
+
+                            AssetManager assetManager = getContext().getAssets();
+                            String[] files = null;
+
+                            if(vidname != null && !vidname.trim().isEmpty()) {
+                                xMediaPlayer.setDataSource(vidname);
+                            } else {
+                                LOGGER.e("Video file does not exist.");
+                                return;
+                            }
 
                             configureTransform(width, height);
 
-                            mediaPlayer.prepareAsync();
-                            mediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                            xMediaPlayer.prepareAsync();
+                            xMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                                 @Override
                                 public void onPrepared(MediaPlayer mp) {
-                                    mediaPlayer.start();
+                                    timer = new CountDownTimer(xMediaPlayer.getDuration(),50) {
+
+                                        @Override
+                                        public void onTick(long millisUntilFinished) {
+                                            framecount++;
+                                            Bitmap bmp = textureView.getBitmap();
+                                            LOGGER.d("Loop BMP count = " + bmp.getByteCount() +
+                                                    "config = " + bmp.getConfig() +
+                                                    "H " + bmp.getHeight() + " W " + bmp.getWidth());
+                                            Bitmap retBmp = Bitmap.createScaledBitmap(bmp, 640, 480, false);
+
+                                            //SaveImage(retBmp, framecount);
+
+                                            mFrameCallback.onVideoFrameData(retBmp);
+                                        }
+
+                                        @Override
+                                        public void onFinish() {
+
+                                        }
+                                    };
+                                    timer.start();
+                                    xMediaPlayer.start();
                                 }
                             });
+                            playbackConnectionCallback.onPreviewSizeChosen(previewSize, 0);
                         }
+
                     }
                     catch (IOException e) {
                         e.printStackTrace();
@@ -149,7 +206,7 @@ public class VideoPlaybackFragment extends Fragment {
                 @Override
                 public void onSurfaceTextureSizeChanged(
                         final SurfaceTexture texture, final int width, final int height) {
-                    //configureTransform(width, height);
+                    configureTransform(width, height);
                 }
 
                 @Override
@@ -162,19 +219,50 @@ public class VideoPlaybackFragment extends Fragment {
             };
 
     private VideoPlaybackFragment(
+            final ConnectionCallback connectionCallback,
             final OnImageAvailableListener imageListener,
+            final VideoFrame frameCallback,
             final int layout,
-            final Size inputSize) {
+            final Size inputSize,
+            final String name) {
+        this.playbackConnectionCallback = connectionCallback;
         this.imageListener = imageListener;
+        this.mFrameCallback = frameCallback;
         this.layout = layout;
         this.inputSize = inputSize;
+        this.vidname = name;
     }
 
+    public static void SaveImage(Bitmap finalBitmap, int cnt) {
+
+        String root = Environment.getExternalStorageDirectory().getAbsolutePath();
+        File myDir = new File(root + "/saved_images");
+        myDir.mkdirs();
+
+        String fname = "Image-"+ cnt +".jpg";
+        File file = new File (myDir, fname);
+        LOGGER.d("save file !!! " + file.getAbsolutePath());
+        if (file.exists ()) file.delete ();
+        try {
+            FileOutputStream out = new FileOutputStream(file);
+            finalBitmap.compress(Bitmap.CompressFormat.JPEG, 90, out);
+            out.flush();
+            out.close();
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
     public static VideoPlaybackFragment newInstance(
+            final ConnectionCallback callback,
             final OnImageAvailableListener imageListener,
+            final VideoFrame frameCallback,
             final int layout,
-            final Size inputSize) {
-        return new VideoPlaybackFragment(imageListener, layout, inputSize);
+            final Size inputSize,
+            final String name) {
+        return new VideoPlaybackFragment(callback,imageListener, frameCallback, layout, inputSize,name);
     }
 
     @Override
@@ -192,14 +280,7 @@ public class VideoPlaybackFragment extends Fragment {
     public void onActivityCreated(final Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
 
-        mediaPlayer = new MediaPlayer();
-        //try {
-            //final Activity activity = getActivity();
-            //fileDescriptor = activity.getAssets().openFd("/sdcard/Movies/Never_Settle.mp4");
-        //}
-        //catch (IOException e) {
-        //    e.printStackTrace();
-        //}
+        xMediaPlayer = new MediaPlayer();
     }
 
     @Override
@@ -222,6 +303,11 @@ public class VideoPlaybackFragment extends Fragment {
     public void onPause() {
         stopBackgroundThread();
         super.onPause();
+    }
+
+
+    public Bitmap getBitmap(){
+        return  textureView.getBitmap();
     }
 
     /** Starts a background thread and its {@link Handler}. */
@@ -272,7 +358,7 @@ public class VideoPlaybackFragment extends Fragment {
             matrix.postScale(scale, scale, centerX, centerY);
             matrix.postRotate(90 * (rotation - 2), centerX, centerY);
         } else if (Surface.ROTATION_180 == rotation) {*/
-            matrix.postRotate(90, centerX, centerY);
+            matrix.postRotate(0, centerX, centerY);
         //}
         textureView.setTransform(matrix);
     }

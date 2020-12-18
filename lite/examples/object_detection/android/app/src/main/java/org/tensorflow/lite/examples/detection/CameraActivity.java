@@ -20,6 +20,7 @@ import android.Manifest;
 import android.app.Fragment;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Bitmap;
 import android.hardware.Camera;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
@@ -47,6 +48,7 @@ import android.view.ViewTreeObserver;
 import android.view.WindowManager;
 import android.widget.AdapterView;
 import android.widget.ArrayAdapter;
+import android.widget.Button;
 import android.widget.CompoundButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -56,12 +58,17 @@ import android.widget.Toast;
 import android.widget.ToggleButton;
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior;
+
+import java.nio.Buffer;
 import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
+import org.tensorflow.lite.examples.detection.VideoFrame;
 
 import com.serenegiant.usb.IFrameCallback;
 
@@ -71,12 +78,14 @@ public abstract class CameraActivity extends AppCompatActivity
         CompoundButton.OnCheckedChangeListener,
         View.OnClickListener,
         IFrameCallback,
-        AdapterView.OnItemSelectedListener {
+        AdapterView.OnItemSelectedListener,
+        VideoFrame {
   private static final Logger LOGGER = new Logger();
 
   private static final int PERMISSIONS_REQUEST = 1;
 
   private static final String PERMISSION_CAMERA = Manifest.permission.CAMERA;
+  private static final String PERMISSION_SDCARD = Manifest.permission.READ_EXTERNAL_STORAGE;
   protected int previewWidth = 0;
   protected int previewHeight = 0;
   private boolean debug = false;
@@ -102,7 +111,10 @@ public abstract class CameraActivity extends AppCompatActivity
   private Spinner resolutionSpinner;
   private ArrayAdapter<String> adapter;
   private Size cameraResolution;
+  private Button openFileButton;
   List<String> supportedResolutions;
+  private String currVideofile = "";
+  private Fragment mFragment;
 
   @Override
   protected void onCreate(final Bundle savedInstanceState) {
@@ -131,7 +143,7 @@ public abstract class CameraActivity extends AppCompatActivity
     sheetBehavior = BottomSheetBehavior.from(bottomSheetLayout);
     bottomSheetArrowImageView = findViewById(R.id.bottom_sheet_arrow);
     resolutionSpinner = findViewById(R.id.resolutionSpinner);
-
+    openFileButton = findViewById(R.id.button_open_video);
 
     cameraResolution = new Size(640, 480);
 
@@ -143,6 +155,7 @@ public abstract class CameraActivity extends AppCompatActivity
     adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);
     resolutionSpinner.setAdapter(adapter);
     resolutionSpinner.setOnItemSelectedListener(this);
+    openFileButton.setOnClickListener(buttonOpenClick);
 
     ViewTreeObserver vto = gestureLayout.getViewTreeObserver();
     vto.addOnGlobalLayoutListener(
@@ -245,6 +258,24 @@ public abstract class CameraActivity extends AppCompatActivity
     return yuvBytes[0];
   }
 
+  protected  View.OnClickListener buttonOpenClick = new View.OnClickListener() {
+    @Override
+    public void onClick(View v) {
+      LOGGER.d("Button on click");
+      OpenFileDialog fileDialog = new OpenFileDialog(CameraActivity.this);
+      OpenFileDialog.OpenDialogListener  listener = new OpenFileDialog.OpenDialogListener() {
+        @Override
+        public void OnSelectedFile(String fileName) {
+          currVideofile = fileName;
+          LOGGER.d("Video file " + currVideofile);
+          setFragment(cameraResolution);
+        }
+      };
+      fileDialog.setOpenDialogListener(listener);
+      fileDialog.show();
+    }
+  };
+
   /** Callback for android.hardware.Camera API */
   @Override
   public void onPreviewFrame(final byte[] bytes, final Camera camera) {
@@ -294,6 +325,7 @@ public abstract class CameraActivity extends AppCompatActivity
   @Override
   public void onImageAvailable(final ImageReader reader) {
     // We need wait until we have some size from onPreviewSizeChosen
+
     if (previewWidth == 0 || previewHeight == 0) {
       return;
     }
@@ -416,6 +448,58 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
   @Override
+  public void onVideoFrameData(Bitmap bmp) {
+    LOGGER.d("onVideoFrame start prev pW " + previewWidth +" ph " + previewHeight);
+    if (bmp == null ) {
+      LOGGER.d("VidoeFrame == null");
+      return;
+    }
+    previewHeight = bmp.getHeight();
+    previewWidth = bmp.getWidth();
+
+    if (previewWidth == 0 || previewHeight == 0) {
+      LOGGER.d("We need wait until we have some size from onPreviewSizeChosen");
+      return;
+    }
+    if (rgbBytes == null) {
+      rgbBytes = new int[bmp.getByteCount()/4];
+    }
+
+    if (isProcessingFrame) {
+      LOGGER.d("Drop frame");
+      return;
+    }
+
+    isProcessingFrame = true;
+    LOGGER.d("VideoFrame: imageAvailable");
+
+    imageConverter =
+            new Runnable() {
+              @Override
+              public void run() {
+                LOGGER.d("converter not needed ");
+                int imageSize = bmp.getRowBytes() * bmp.getHeight();
+                IntBuffer uncompressedBuffer = IntBuffer.allocate( imageSize);
+                bmp.copyPixelsToBuffer(uncompressedBuffer);
+
+                rgbBytes = Arrays.copyOfRange(uncompressedBuffer.array(),0,uncompressedBuffer.array().length);
+              }
+            };
+
+    postInferenceCallback =
+            new Runnable() {
+              @Override
+              public void run() {
+                  isProcessingFrame = false;
+              }
+            };
+
+    processImage();
+    LOGGER.d("onVideoFrame end");
+  }
+
+
+  @Override
   public synchronized void onStart() {
     LOGGER.d("onStart " + this);
     super.onStart();
@@ -491,7 +575,9 @@ public abstract class CameraActivity extends AppCompatActivity
 
   private boolean hasPermission() {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-      return checkSelfPermission(PERMISSION_CAMERA) == PackageManager.PERMISSION_GRANTED;
+      int camera = checkSelfPermission(PERMISSION_CAMERA);
+      int sdcard = checkCallingPermission(PERMISSION_SDCARD);
+      return (camera == PackageManager.PERMISSION_GRANTED) && (sdcard == PackageManager.PERMISSION_GRANTED);
     } else {
       return true;
     }
@@ -506,7 +592,14 @@ public abstract class CameraActivity extends AppCompatActivity
                 Toast.LENGTH_LONG)
             .show();
       }
-      requestPermissions(new String[] {PERMISSION_CAMERA}, PERMISSIONS_REQUEST);
+      if (shouldShowRequestPermissionRationale(PERMISSION_SDCARD)) {
+        Toast.makeText(
+                CameraActivity.this,
+                "Read SDCARD permission is required for this demo",
+                Toast.LENGTH_LONG)
+                .show();
+      }
+      requestPermissions(new String[] {PERMISSION_CAMERA, PERMISSION_SDCARD}, PERMISSIONS_REQUEST);
     }
   }
 
@@ -563,26 +656,52 @@ public abstract class CameraActivity extends AppCompatActivity
 
   protected void setFragment(Size cameraResolution) {
     String cameraId = chooseCamera();
-    Fragment fragment;
 
     if (useCamera2API) {
-      /*CameraConnectionFragment camera2Fragment =
-          CameraConnectionFragment.newInstance(
-              new CameraConnectionFragment.ConnectionCallback() {
+      if (mFragment == null && !"".equals(currVideofile)) {
+        LOGGER.e("NDBG set current file name =  " + currVideofile);
+
+        VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
+              new VideoPlaybackFragment.ConnectionCallback() {
                 @Override
-                public void onPreviewSizeChosen(final Size size, final int rotation) {
+                public void onPreviewSizeChosen(Size size, int cameraRotation) {
                   previewHeight = size.getHeight();
                   previewWidth = size.getWidth();
-                  CameraActivity.this.onPreviewSizeChosen(size, rotation);
+                  rgbBytes = null;
+                  CameraActivity.this.onPreviewSizeChosen(size, cameraRotation);
                 }
               },
               this,
+              this,
               getLayoutId(),
-              getDesiredPreviewFrameSize());
+              getDesiredPreviewFrameSize(),
+              currVideofile
+      );
+      mFragment = video2Fragment;
 
-      camera2Fragment.setCamera(cameraId);
-      fragment = camera2Fragment;*/
+      /*
 
+
+        CameraConnectionFragment camera2Fragment =
+                CameraConnectionFragment.newInstance(
+                        new CameraConnectionFragment.ConnectionCallback() {
+                          @Override
+                          public void onPreviewSizeChosen(final Size size, final int rotation) {
+                            previewHeight = size.getHeight();
+                            previewWidth = size.getWidth();
+                            LOGGER.d("camera  w=" + previewHeight + " h=" + previewHeight);
+                            CameraActivity.this.onPreviewSizeChosen(size, rotation);
+                          }
+                        },
+                        this,
+                        getLayoutId(),
+                        getDesiredPreviewFrameSize());
+
+        camera2Fragment.setCamera(cameraId);
+        mFragment = camera2Fragment;
+
+*/
+/*
       ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
               new ExternalCameraConnectionFragment.ConnectionCallback() {
                 @Override
@@ -611,8 +730,8 @@ public abstract class CameraActivity extends AppCompatActivity
               });
 
       fragment = externalCameraFrag;
-
-      //R.layout.tfe_od_camera_connection_fragment_tracking;
+      */
+        //R.layout.tfe_od_camera_connection_fragment_tracking;
 
       /*VideoPlaybackFragment videoFragment = VideoPlaybackFragment.newInstance(
               this,
@@ -620,12 +739,15 @@ public abstract class CameraActivity extends AppCompatActivity
               getDesiredPreviewFrameSize());
 
       fragment = videoFragment;*/
+      }
     } else {
-      fragment =
+      mFragment =
           new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());
     }
 
-    getFragmentManager().beginTransaction().replace(R.id.container, fragment).commit();
+    if (mFragment!=null) {
+      getFragmentManager().beginTransaction().replace(R.id.container, mFragment).commit();
+    }
   }
 
   protected void fillBytes(final Plane[] planes, final byte[][] yuvBytes) {

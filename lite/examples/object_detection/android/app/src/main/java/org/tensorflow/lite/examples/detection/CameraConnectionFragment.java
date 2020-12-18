@@ -302,7 +302,7 @@ public class CameraConnectionFragment extends Fragment {
     // a camera and start preview from here (otherwise, we wait until the surface is ready in
     // the SurfaceTextureListener).
     if (textureView.isAvailable()) {
-      openCamera(textureView.getWidth(), textureView.getHeight());
+      //openCamera(textureView.getWidth(), textureView.getHeight());
     } else {
       textureView.setSurfaceTextureListener(surfaceTextureListener);
     }

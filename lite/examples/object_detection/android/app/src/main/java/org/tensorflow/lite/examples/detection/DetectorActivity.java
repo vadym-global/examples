@@ -75,7 +75,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private static final float MINIMUM_CONFIDENCE_TF_OD_API = 0.5f;
   private static final boolean MAINTAIN_ASPECT = false;
   private static final Size DESIRED_PREVIEW_SIZE = new Size(640, 480);
-  private static final boolean SAVE_PREVIEW_BITMAP = true;
+  private static final boolean SAVE_PREVIEW_BITMAP = false;
   private static final float TEXT_SIZE_DIP = 10;
   OverlayView trackingOverlay;
   private Integer sensorOrientation;
@@ -119,6 +119,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
   @Override
   public void onPreviewSizeChosen(final Size size, final int rotation) {
+    LOGGER.d("NDBG onPreviewSizeChosen");
     final float textSizePx =
         TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_DIP, TEXT_SIZE_DIP, getResources().getDisplayMetrics());
@@ -278,7 +279,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
       return;
     }
     computingDetection = true;
-    LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
+    LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread. prevW " + previewWidth + " prevH" + previewHeight);
 
     rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
 
@@ -336,8 +337,10 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     // For examining the actual TF input.
     if (SAVE_PREVIEW_BITMAP) {
-      ImageUtils.saveBitmap(rgbFrameBitmap, "original.png");
-      ImageUtils.saveBitmap(opencvResizeimageBitmap, "opencvresize.png");
+
+      VideoPlaybackFragment.SaveImage(opencvResizeimageBitmap, (int)timestamp);
+      //ImageUtils.saveBitmap(rgbFrameBitmap, "original.png");
+      //ImageUtils.saveBitmap(opencvResizeimageBitmap, "opencvresize.png");
     }
 
     runInBackground(
@@ -459,7 +462,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   @Override
   public synchronized void onStop() {
     super.onStop();
-    toggleCrop.setChecked(false);
+    //toggleCrop.setChecked(false);
   }
 
   @Override
