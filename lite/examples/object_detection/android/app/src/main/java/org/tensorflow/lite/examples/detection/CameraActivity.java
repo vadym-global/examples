@@ -112,6 +112,7 @@ public abstract class CameraActivity extends AppCompatActivity
   private ArrayAdapter<String> adapter;
   private Size cameraResolution;
   private Button openFileButton;
+  private Button openCameraButton;
   List<String> supportedResolutions;
   private String currVideofile = "";
   private Fragment mFragment;
@@ -129,7 +130,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
 
     if (hasPermission()) {
-      setFragment(null);
+      setFragment(true, null);
     } else {
       requestPermission();
     }
@@ -144,6 +145,7 @@ public abstract class CameraActivity extends AppCompatActivity
     bottomSheetArrowImageView = findViewById(R.id.bottom_sheet_arrow);
     resolutionSpinner = findViewById(R.id.resolutionSpinner);
     openFileButton = findViewById(R.id.button_open_video);
+    openCameraButton = findViewById(R.id.button_open_camera);
 
     cameraResolution = new Size(640, 480);
 
@@ -156,6 +158,7 @@ public abstract class CameraActivity extends AppCompatActivity
     resolutionSpinner.setAdapter(adapter);
     resolutionSpinner.setOnItemSelectedListener(this);
     openFileButton.setOnClickListener(buttonOpenClick);
+    openCameraButton.setOnClickListener(buttonCameraOpenClick);
 
     ViewTreeObserver vto = gestureLayout.getViewTreeObserver();
     vto.addOnGlobalLayoutListener(
@@ -228,7 +231,7 @@ public abstract class CameraActivity extends AppCompatActivity
       cameraResolution = resolutionFromString(resolution);
 
       disableCrop();
-      setFragment(cameraResolution);
+      setFragment(true, cameraResolution);
     }
   }
 
@@ -268,11 +271,20 @@ public abstract class CameraActivity extends AppCompatActivity
         public void OnSelectedFile(String fileName) {
           currVideofile = fileName;
           LOGGER.d("Video file " + currVideofile);
-          setFragment(cameraResolution);
+          setFragment(false, cameraResolution);
         }
       };
       fileDialog.setOpenDialogListener(listener);
       fileDialog.show();
+    }
+  };
+
+  protected  View.OnClickListener buttonCameraOpenClick = new View.OnClickListener() {
+    @Override
+    public void onClick(View v) {
+      LOGGER.d("Button camera on click");
+      disableCrop();
+      setFragment(true, cameraResolution);
     }
   };
 
@@ -514,7 +526,7 @@ public abstract class CameraActivity extends AppCompatActivity
     handlerThread.start();
     handler = new Handler(handlerThread.getLooper());
 
-    setFragment(cameraResolution);
+    setFragment(true, cameraResolution);
   }
 
   @Override
@@ -557,7 +569,7 @@ public abstract class CameraActivity extends AppCompatActivity
     super.onRequestPermissionsResult(requestCode, permissions, grantResults);
     if (requestCode == PERMISSIONS_REQUEST) {
       if (allPermissionsGranted(grantResults)) {
-        setFragment(null);
+        setFragment(true, null);
       } else {
         requestPermission();
       }
@@ -654,55 +666,34 @@ public abstract class CameraActivity extends AppCompatActivity
   }
 
 
-  protected void setFragment(Size cameraResolution) {
+  protected void setFragment(boolean isCamera, Size cameraResolution) {
     String cameraId = chooseCamera();
 
-    if (useCamera2API) {
-      if (mFragment == null && !"".equals(currVideofile)) {
+    if (isCamera == false) {
+      if (!"".equals(currVideofile)) {
         LOGGER.e("NDBG set current file name =  " + currVideofile);
 
         VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
-              new VideoPlaybackFragment.ConnectionCallback() {
-                @Override
-                public void onPreviewSizeChosen(Size size, int cameraRotation) {
-                  previewHeight = size.getHeight();
-                  previewWidth = size.getWidth();
-                  rgbBytes = null;
-                  CameraActivity.this.onPreviewSizeChosen(size, cameraRotation);
-                }
-              },
-              this,
-              this,
-              getLayoutId(),
-              getDesiredPreviewFrameSize(),
-              currVideofile
-      );
-      mFragment = video2Fragment;
+                new VideoPlaybackFragment.ConnectionCallback() {
+                  @Override
+                  public void onPreviewSizeChosen(Size size, int cameraRotation) {
+                    previewHeight = size.getHeight();
+                    previewWidth = size.getWidth();
+                    rgbBytes = null;
+                    CameraActivity.this.onPreviewSizeChosen(size, cameraRotation);
+                  }
+                },
+                this,
+                this,
+                getLayoutId(),
+                getDesiredPreviewFrameSize(),
+                currVideofile
+        );
+        mFragment = video2Fragment;
+      }
+    } else {
 
-      /*
-
-
-        CameraConnectionFragment camera2Fragment =
-                CameraConnectionFragment.newInstance(
-                        new CameraConnectionFragment.ConnectionCallback() {
-                          @Override
-                          public void onPreviewSizeChosen(final Size size, final int rotation) {
-                            previewHeight = size.getHeight();
-                            previewWidth = size.getWidth();
-                            LOGGER.d("camera  w=" + previewHeight + " h=" + previewHeight);
-                            CameraActivity.this.onPreviewSizeChosen(size, rotation);
-                          }
-                        },
-                        this,
-                        getLayoutId(),
-                        getDesiredPreviewFrameSize());
-
-        camera2Fragment.setCamera(cameraId);
-        mFragment = camera2Fragment;
-
-*/
-/*
-      ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
+        ExternalCameraConnectionFragment externalCameraFrag = ExternalCameraConnectionFragment.newInstance(
               new ExternalCameraConnectionFragment.ConnectionCallback() {
                 @Override
                 public void onPreviewSizeChosen(final Size size, final int rotation) {
@@ -729,23 +720,10 @@ public abstract class CameraActivity extends AppCompatActivity
                 }
               });
 
-      fragment = externalCameraFrag;
-      */
-        //R.layout.tfe_od_camera_connection_fragment_tracking;
-
-      /*VideoPlaybackFragment videoFragment = VideoPlaybackFragment.newInstance(
-              this,
-              getLayoutId(),
-              getDesiredPreviewFrameSize());
-
-      fragment = videoFragment;*/
-      }
-    } else {
-      mFragment =
-          new LegacyCameraConnectionFragment(this, getLayoutId(), getDesiredPreviewFrameSize());
+        mFragment = externalCameraFrag;
     }
 
-    if (mFragment!=null) {
+    if (mFragment != null) {
       getFragmentManager().beginTransaction().replace(R.id.container, mFragment).commit();
     }
   }
