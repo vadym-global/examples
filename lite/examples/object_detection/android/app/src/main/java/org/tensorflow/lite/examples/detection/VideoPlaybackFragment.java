@@ -18,35 +18,16 @@ package org.tensorflow.lite.examples.detection;
 
 import android.annotation.SuppressLint;
 import android.app.Activity;
-import android.app.AlertDialog;
-import android.app.Dialog;
-import android.app.DialogFragment;
 import android.app.Fragment;
-import android.content.Context;
-import android.content.DialogInterface;
 import android.content.res.AssetFileDescriptor;
 import android.content.res.AssetManager;
-import android.content.res.Configuration;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
-import android.graphics.ImageFormat;
 import android.graphics.Matrix;
 import android.graphics.RectF;
 import android.graphics.SurfaceTexture;
-import android.hardware.camera2.CameraAccessException;
-import android.hardware.camera2.CameraCaptureSession;
-import android.hardware.camera2.CameraCharacteristics;
-import android.hardware.camera2.CameraDevice;
-import android.hardware.camera2.CameraManager;
-import android.hardware.camera2.CaptureRequest;
-import android.hardware.camera2.CaptureResult;
-import android.hardware.camera2.TotalCaptureResult;
-import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.ImageReader;
 import android.media.ImageReader.OnImageAvailableListener;
 import android.media.MediaPlayer;
-import android.media.PlaybackParams;
-import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CountDownTimer;
@@ -61,20 +42,14 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Toast;
-
-import com.serenegiant.usb.IFrameCallback;
 
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.Semaphore;
-import java.util.concurrent.TimeUnit;
+
 import org.tensorflow.lite.examples.detection.customview.AutoFitTextureView;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
@@ -123,7 +98,7 @@ public class VideoPlaybackFragment extends Fragment {
     private final String vidname;
 
 
-    CountDownTimer timer;
+    CountDownTimer mFrameTimer;
     int framecount = 0;
 
     public interface ConnectionCallback {
@@ -169,7 +144,7 @@ public class VideoPlaybackFragment extends Fragment {
                             xMediaPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                                 @Override
                                 public void onPrepared(MediaPlayer mp) {
-                                    timer = new CountDownTimer(xMediaPlayer.getDuration(),50) {
+                                    mFrameTimer = new CountDownTimer(xMediaPlayer.getDuration(),50) {
 
                                         @Override
                                         public void onTick(long millisUntilFinished) {
@@ -190,10 +165,11 @@ public class VideoPlaybackFragment extends Fragment {
 
                                         }
                                     };
-                                    timer.start();
+                                    mFrameTimer.start();
                                     xMediaPlayer.start();
                                 }
                             });
+
                             playbackConnectionCallback.onPreviewSizeChosen(previewSize, 0);
                         }
 
@@ -301,6 +277,7 @@ public class VideoPlaybackFragment extends Fragment {
 
     @Override
     public void onPause() {
+        mFrameTimer.cancel();
         stopBackgroundThread();
         super.onPause();
     }
