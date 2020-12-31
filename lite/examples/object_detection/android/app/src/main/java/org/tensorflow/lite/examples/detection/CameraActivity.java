@@ -671,7 +671,7 @@ public abstract class CameraActivity extends AppCompatActivity
 
     if (isCamera == false) {
       if (!"".equals(currVideofile)) {
-        LOGGER.e("NDBG set current file name =  " + currVideofile);
+        LOGGER.e("Set current file name =  " + currVideofile);
 
         VideoPlaybackFragment video2Fragment = VideoPlaybackFragment.newInstance(
                 new VideoPlaybackFragment.ConnectionCallback() {
